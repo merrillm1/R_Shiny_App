@@ -1,0 +1,88 @@
+---
+title: "Catboost Model for Predcting Hotel Reservations"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+## Introducton
+
+The data for this prediction task comes from [Tidytuesday](https://github.com/rfordatascience/tidytuesday/blob/master/data/2020/2020-02-11/readme.md). We start off by importing the requisite libraries and reading in the data.
+
+```{r}
+library(tidyverse)
+library(lubridate)
+library(reticulate)
+hotels <- read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2020/2020-02-11/hotels.csv')
+```
+
+## Data Cleaning
+
+Select the variables for building the model.
+
+```{r}
+hotels <- hotels %>% mutate(
+  arrival_date = ymd(paste(
+    arrival_date_year, arrival_date_month, arrival_date_day_of_month,
+    sep = ' '
+  ))
+)
+df <- hotels %>% select(lead_time, country, market_segment, distribution_channel, is_repeated_guest,
+                        previous_cancellations, previous_bookings_not_canceled, reserved_room_type,
+                        agent, company, adr, required_car_parking_spaces, total_of_special_requests,
+                        customer_type, deposit_type, meal, adults, babies, children, arrival_date,
+                        is_canceled)
+df$is_canceled <- factor(df$is_canceled)
+```
+
+Lumping together factors.
+
+```{r}
+df <- df %>% mutate(
+  country = fct_lump_min(country, 500),
+  agent = fct_lump_min(agent, 1000),
+  company = fct_lump_min(company, 100),
+  market_segment = fct_lump_min(market_segment, 500)
+)
+```
+
+Consider only complete cases.
+
+```{r}
+df <- df[complete.cases(df), ]
+```
+
+## Building a predictive model with catboost
+
+```{python}
+import catboost
+print(catboost.__version__)
+import pandas as pd
+import numpy as np
+```
+
+```{python}
+hotels = r.df
+y = hotels.is_canceled
+X = hotels.drop('is_canceled', axis=1)
+
+cat_features = [1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 13, 14, 15, 19]
+```
+
+Split the data
+
+```{python}
+
+from sklearn.model_selection import train_test_split
+
+X_train, X_validation, y_train, y_validation = train_test_split(X, y, train_size=0.75, random_state=42)
+
+```
+
+```{python}
+from catboost import CatBoostClassifier, Pool, cv
+from sklearn.metrics import accuracy_score
+```
+
